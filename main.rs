@@ -7,16 +7,13 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::time::SystemTime;
 use hyper::Request;
-use hyper::body::HttpBody as _; // for body data
-use tokio_util::codec::{FramedRead, LinesCodec};
-use futures::stream::StreamExt;
+use tokio_socks::tcp::Socks5Stream;
 
 async fn transfer(
     mut inbound: TcpStream,
-    outbound_address: SocketAddr,
     response_sender: mpsc::Sender<io::Result<()>>,
 ) {
-    match TcpStream::connect(outbound_address).await {
+    match Socks5Stream::connect("127.0.0.1:9050", "destination.address:port").await {
         Ok(mut outbound) => {
             let (mut ri, mut wi) = inbound.split();
             let (mut ro, mut wo) = outbound.split();
@@ -25,27 +22,26 @@ async fn transfer(
             let mut buffer = Vec::new();
             if let Ok(_) = ri.read_to_end(&mut buffer).await {
                 if let Ok(req) = Request::from_slice(&buffer) {
-                    if let Some(uri) = req.uri().to_string().strip_prefix("http://") {
-                        // Log URL and timestamp
-                        let timestamp = SystemTime::now();
-                        let log_entry = format!("{:?} - {}\n", timestamp, uri);
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("data/urls.log")
-                            .unwrap();
-                        file.write_all(log_entry.as_bytes()).unwrap();
+                    let uri = req.uri();
+                    // Log URL and timestamp
+                    let timestamp = SystemTime::now();
+                    let log_entry = format!("{:?} - {}\n", timestamp, uri);
+                    let mut file = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("data/urls.log")
+                        .unwrap();
+                    file.write_all(log_entry.as_bytes()).unwrap();
 
-                        // Save request content
-                        let path = format!("data/{}.html", uri.replace("/", "_"));
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(path)
-                            .unwrap();
-                        file.write_all(&buffer).unwrap();
-                    }
+                    // Save request content
+                    let path = format!("data/{}.html", uri.to_string().replace("/", "_"));
+                    let mut file = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(path)
+                        .unwrap();
+                    file.write_all(&buffer).unwrap();
                 }
             }
 
@@ -74,12 +70,8 @@ async fn transfer(
 }
 
 async fn handle_client(inbound: TcpStream) {
-    // Specify the target address you want to forward traffic to.
-    // For this example, we are forwarding to a Tor-proxy running locally on port 9050
-    let proxy_addr: SocketAddr = "127.0.0.1:9050".parse().unwrap();
-
     let (sender, mut receiver) = mpsc::channel(1);
-    spawn(transfer(inbound, proxy_addr, sender));
+    spawn(transfer(inbound, sender));
 
     if let Some(result) = receiver.recv().await {
         if let Err(e) = result {
@@ -89,7 +81,7 @@ async fn handle_client(inbound: TcpStream) {
 }
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> std::io::Result<()> {
     // Explicitly define the type of addr to avoid type inference issues
     let addr: SocketAddr = "0.0.0.0:3030".parse().unwrap();
     let listener = TcpListener::bind(addr).await?;
