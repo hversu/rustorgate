@@ -1,11 +1,11 @@
 [package]
 name = "rustorgate"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.16", features = ["full"] }
-hyper = { version = "0.14", features = ["full"] }
-socks = "0.3.4"
-tokio-util = "0.6"
-futures = "0.3"
+tokio = { version = "1.28.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["socks"] }
+select = "0.6.0"
+chrono = "0.4.26"
+url = "2.3"
