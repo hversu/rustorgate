@@ -11,7 +11,7 @@ data logged:
 `timestamp, url, data from visited sites`
 
 time and url are logged in:
-access_log.txt  
+`access_log.txt`
 
 site data is logged in:
-scraped_content.txt
+`scraped_content.txt`
